@@ -237,9 +237,208 @@ program
   .description('Install git hook for automatic commit messages')
   .option('--install', 'Install prepare-commit-msg hook')
   .option('--uninstall', 'Remove hook')
+  .option('--status', 'Check hook status')
   .action(async (options) => {
-    console.log(chalk.yellow('⚠️  Git hook feature coming soon!'));
-    console.log(chalk.gray('   For now, use: ai-commit -c'));
+    try {
+      const { installHook, uninstallHook, getHookStatus } = await import('./hooks');
+      
+      if (options.status) {
+        const status = getHookStatus();
+        console.log(chalk.blue('\n🔗 Git Hook Status:\n'));
+        
+        if (!status.installed) {
+          console.log(chalk.yellow('  No hook installed'));
+        } else {
+          console.log(chalk.green(`  ✓ Hook installed: ${status.path}`));
+          if (status.isAiCommit) {
+            console.log(chalk.gray('    Managed by ai-commit'));
+          } else {
+            console.log(chalk.yellow('    Not managed by ai-commit'));
+          }
+        }
+        
+        console.log(chalk.gray('\n  Install with: ai-commit hook --install'));
+        return;
+      }
+      
+      if (options.uninstall) {
+        const result = uninstallHook();
+        
+        if (result.success) {
+          console.log(chalk.green(`✅ ${result.message}`));
+        } else {
+          console.log(chalk.red(`❌ ${result.message}`));
+        }
+        return;
+      }
+      
+      if (options.install) {
+        const result = installHook();
+        
+        if (result.success) {
+          console.log(chalk.green(`✅ ${result.message}`));
+          console.log(chalk.gray(`   Path: ${result.path}`));
+          console.log(chalk.gray('\n   The hook will automatically generate commit messages.'));
+          console.log(chalk.gray('   To disable, run: ai-commit hook --uninstall'));
+        } else {
+          console.log(chalk.red(`❌ ${result.message}`));
+        }
+        return;
+      }
+      
+      // Interactive mode
+      const status = getHookStatus();
+      const { action } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'action',
+          message: 'What would you like to do?',
+          choices: [
+            { name: 'Install hook', value: 'install', disabled: status.isAiCommit },
+            { name: 'Uninstall hook', value: 'uninstall', disabled: !status.isAiCommit },
+            { name: 'Check status', value: 'status' },
+            { name: 'Cancel', value: 'cancel' }
+          ]
+        }
+      ]);
+      
+      if (action === 'cancel') return;
+      
+      if (action === 'status') {
+        console.log(chalk.blue('\n🔗 Git Hook Status:\n'));
+        if (status.installed) {
+          console.log(chalk.green(`  ✓ Hook installed: ${status.path}`));
+        } else {
+          console.log(chalk.yellow('  No hook installed'));
+        }
+        return;
+      }
+      
+      const result = action === 'install' ? installHook() : uninstallHook();
+      
+      if (result.success) {
+        console.log(chalk.green(`✅ ${result.message}`));
+      } else {
+        console.log(chalk.red(`❌ ${result.message}`));
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Error:'), error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  });
+
+// Template command
+program
+  .command('template')
+  .description('Manage commit message templates')
+  .option('-l, --list', 'List all templates')
+  .option('-c, --create', 'Create a new template')
+  .option('-d, --delete <name>', 'Delete a custom template')
+  .option('-s, --show <name>', 'Show template details')
+  .action(async (options) => {
+    try {
+      const { 
+        loadTemplates, 
+        getTemplate, 
+        saveTemplate, 
+        deleteTemplate, 
+        createTemplateInteractive,
+        listTemplates 
+      } = await import('./templates');
+      
+      if (options.list) {
+        listTemplates();
+        return;
+      }
+      
+      if (options.show) {
+        const template = getTemplate(options.show);
+        
+        if (!template) {
+          console.log(chalk.red(`❌ Template not found: ${options.show}`));
+          return;
+        }
+        
+        console.log(chalk.blue('\n📋 Template Details:\n'));
+        console.log(`  Name: ${chalk.cyan(template.name)}`);
+        if (template.description) {
+          console.log(`  Description: ${template.description}`);
+        }
+        console.log(`  Pattern: ${chalk.yellow(template.pattern)}`);
+        console.log(`  Example: ${chalk.green(template.example)}`);
+        return;
+      }
+      
+      if (options.delete) {
+        const deleted = deleteTemplate(options.delete);
+        
+        if (deleted) {
+          console.log(chalk.green(`✅ Template deleted: ${options.delete}`));
+        } else {
+          console.log(chalk.red(`❌ Template not found or is a default template`));
+        }
+        return;
+      }
+      
+      if (options.create) {
+        const template = await createTemplateInteractive();
+        saveTemplate(template);
+        console.log(chalk.green(`✅ Template created: ${template.name}`));
+        return;
+      }
+      
+      // Interactive mode
+      const { action } = await inquirer.prompt([
+        {
+          type: 'list',
+          name: 'action',
+          message: 'What would you like to do?',
+          choices: [
+            { name: 'List templates', value: 'list' },
+            { name: 'Create template', value: 'create' },
+            { name: 'Delete template', value: 'delete' },
+            { name: 'Cancel', value: 'cancel' }
+          ]
+        }
+      ]);
+      
+      if (action === 'cancel') return;
+      
+      if (action === 'list') {
+        listTemplates();
+      } else if (action === 'create') {
+        const template = await createTemplateInteractive();
+        saveTemplate(template);
+        console.log(chalk.green(`✅ Template created: ${template.name}`));
+      } else if (action === 'delete') {
+        const templates = loadTemplates();
+        const customTemplates = templates.filter(t => 
+          !['default', 'detailed', 'breaking', 'simple'].includes(t.name)
+        );
+        
+        if (customTemplates.length === 0) {
+          console.log(chalk.yellow('No custom templates to delete'));
+          return;
+        }
+        
+        const { name } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'name',
+            message: 'Select template to delete:',
+            choices: customTemplates.map(t => ({ name: t.name, value: t.name }))
+          }
+        ]);
+        
+        const deleted = deleteTemplate(name);
+        if (deleted) {
+          console.log(chalk.green(`✅ Template deleted: ${name}`));
+        }
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Error:'), error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
   });
 
 async function generateCommit(options: {
