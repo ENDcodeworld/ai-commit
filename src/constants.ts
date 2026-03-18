@@ -156,4 +156,20 @@ export const KEYWORD_TYPE_MAP: Record<string, string> = {
   'package': 'build',
   '依赖': 'build',
   '构建': 'build',
+  
+  // security keywords
+  'security': 'fix',
+  'vulnerability': 'fix',
+  'cve': 'fix',
+  '安全': 'fix',
+  
+  // merge keywords
+  'merge': 'chore',
+  '合并': 'chore',
+  
+  // release keywords
+  'release': 'chore',
+  'version': 'chore',
+  '发布': 'chore',
+  '版本': 'chore',
 };
